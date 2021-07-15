@@ -1,4 +1,5 @@
 from collections import namedtuple
+from itertools import product
 import numpy as np
 
 Attacker = namedtuple("Attacker", "name num to_hit to_crit dmg dmg_crit mws")
@@ -65,12 +66,16 @@ def simulate_ranged(attacker: Attacker, defender: Defender, samples=100000):
     print()
 
 
-lasgun = Attacker("Lasgun", 4, 4, 6, 2, 3, 0)
-longlas = Attacker("Long-Las", 4, 2, 6, 3, 3, 3)
-trooper_veteran = Defender("Trooper Veteran", 3, 5, 6, None, 7)
-trooper_veteran_hard = Defender("Trooper Veteran (Hardened by War)", 3, 5, 6, 5, 7)
+weapons = [
+    Attacker("Lasgun", 4, 4, 6, 2, 3, 0),
+    Attacker("Long-Las", 4, 2, 6, 3, 3, 3),
+    Attacker("Flamer", 5, 2, 6, 2, 2, 0),
+]
 
-simulate_ranged(lasgun, trooper_veteran)
-simulate_ranged(longlas, trooper_veteran)
-simulate_ranged(lasgun, trooper_veteran_hard)
-simulate_ranged(longlas, trooper_veteran_hard)
+targets = [
+    Defender("Trooper Veteran", 3, 5, 6, None, 7),
+    Defender("Trooper Veteran (Hardened by War)", 3, 5, 6, 5, 7),
+]
+
+for weapon, target in product(weapons, targets):
+    simulate_ranged(weapon, target)
