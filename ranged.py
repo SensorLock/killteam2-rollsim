@@ -12,7 +12,6 @@ def simulate_ranged(attacker: Attacker, defender: Defender, samples=100000):
     d_rolls = np.random.choice(6, (samples, defender.num)) + 1
     
     crits = (a_rolls >= attacker.to_crit).sum(axis=1)
-    # TODO OPEN Q: if MWs don't carry on as crits and just do flat damage then subtract the mws from the crits
     mws = crits * attacker.mws
     hits = (a_rolls >= attacker.to_hit).sum(axis=1) - crits
 
