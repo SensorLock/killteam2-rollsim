@@ -41,6 +41,52 @@ class StrategyBerzerker:
         return a_wounds_taken, d_wounds_taken
 
 
+class StrategyAttackerParry:
+    def __init__(self, attacker, defender):
+        self.attacker = attacker
+        self.defender = defender
+
+    def __call__(self, params):
+        a_crits, a_hits, a_wounds_taken, d_crits, d_hits, d_wounds_taken = params
+
+        while (a_crits + a_hits + d_crits + d_hits) > 0:
+            if a_wounds_taken >= self.attacker.wounds:
+                break
+
+            # PARRY EVERYTHING! (unless there is a lethal riposte)!
+            if a_crits > 0:
+                a_crits -= 1
+                if d_wounds_taken + self.attacker.dmg_crit >= self.defender.wounds:
+                    d_wounds_taken += self.attacker.dmg_crit
+                elif d_crits > 0:
+                    d_crits -= 1
+                elif d_hits > 0:
+                    d_hits -= 1
+                else:
+                    d_wounds_taken += self.attacker.dmg_crit
+            elif a_hits > 0:
+                a_hits -= 1
+                if d_wounds_taken + self.attacker.dmg >= self.defender.wounds:
+                    d_wounds_taken += self.attacker.dmg
+                elif d_hits > 0:
+                    d_hits -= 1
+                else:
+                    d_wounds_taken += self.attacker.dmg
+            
+            if d_wounds_taken >= self.defender.wounds:
+                break
+
+            # BLOCK NOTHING!
+            if d_crits > 0:
+                d_crits -= 1
+                a_wounds_taken += self.defender.dmg_crit
+            elif d_hits > 0:
+                d_hits -= 1
+                a_wounds_taken += self.defender.dmg
+        
+        return a_wounds_taken, d_wounds_taken
+
+
 class StrategyDefenderParry:
     def __init__(self, attacker, defender):
         self.attacker = attacker
@@ -64,10 +110,12 @@ class StrategyDefenderParry:
             if d_wounds_taken >= self.defender.wounds:
                 break
 
-            # PARRY EVERYTHING!
+            # PARRY EVERYTHING! (unless there is a lethal riposte)
             if d_crits > 0:
                 d_crits -= 1
-                if a_crits > 0:
+                if a_wounds_taken + self.defender.dmg_crit >= self.attacker.wounds:
+                    a_wounds_taken += self.defender.dmg_crit
+                elif a_crits > 0:
                     a_crits -= 1
                 elif a_hits > 0:
                     a_hits -= 1
@@ -75,7 +123,9 @@ class StrategyDefenderParry:
                     a_wounds_taken += self.defender.dmg_crit
             elif d_hits > 0:
                 d_hits -= 1
-                if a_hits > 0:
+                if a_wounds_taken + self.defender.dmg >= self.attacker.wounds:
+                    a_wounds_taken += self.defender.dmg
+                elif a_hits > 0:
                     a_hits -= 1
                 else:
                     a_wounds_taken += self.defender.dmg
@@ -95,10 +145,12 @@ class StrategyMaxParry:
             if a_wounds_taken >= self.attacker.wounds:
                 break
 
-            # PARRY EVERYTHING!
+            # PARRY EVERYTHING! (unless there is a lethal riposte)!
             if a_crits > 0:
                 a_crits -= 1
-                if d_crits > 0:
+                if d_wounds_taken + self.attacker.dmg_crit >= self.defender.wounds:
+                    d_wounds_taken += self.attacker.dmg_crit
+                elif d_crits > 0:
                     d_crits -= 1
                 elif d_hits > 0:
                     d_hits -= 1
@@ -106,7 +158,9 @@ class StrategyMaxParry:
                     d_wounds_taken += self.attacker.dmg_crit
             elif a_hits > 0:
                 a_hits -= 1
-                if d_hits > 0:
+                if d_wounds_taken + self.attacker.dmg >= self.defender.wounds:
+                    d_wounds_taken += self.attacker.dmg
+                elif d_hits > 0:
                     d_hits -= 1
                 else:
                     d_wounds_taken += self.attacker.dmg
@@ -114,10 +168,12 @@ class StrategyMaxParry:
             if d_wounds_taken >= self.defender.wounds:
                 break
 
-            # PARRY EVERYTHING!
+            # PARRY EVERYTHING! (unless there is a lethal riposte)
             if d_crits > 0:
                 d_crits -= 1
-                if a_crits > 0:
+                if a_wounds_taken + self.defender.dmg_crit >= self.attacker.wounds:
+                    a_wounds_taken += self.defender.dmg_crit
+                elif a_crits > 0:
                     a_crits -= 1
                 elif a_hits > 0:
                     a_hits -= 1
@@ -125,7 +181,9 @@ class StrategyMaxParry:
                     a_wounds_taken += self.defender.dmg_crit
             elif d_hits > 0:
                 d_hits -= 1
-                if a_hits > 0:
+                if a_wounds_taken + self.defender.dmg >= self.attacker.wounds:
+                    a_wounds_taken += self.defender.dmg
+                elif a_hits > 0:
                     a_hits -= 1
                 else:
                     a_wounds_taken += self.defender.dmg
@@ -155,10 +213,10 @@ def simulate_melee(attacker: Fighter, defender: Fighter, strategy, samples=10000
     d_killed = (d_wounds >= defender.wounds).sum()
 
     print(f"{attacker.name} fighting {defender.name} using {strategy.__class__.__name__}")
-    print(f"Attacker wounds distribution: {np.bincount(a_wounds)}")
+    print(f"Attacker wounds taken distribution: {np.bincount(a_wounds)}")
     print(f"Attacker avg. wounds taken: {a_wounds.mean()}")
     print(f"Attacker killed: {a_killed/samples * 100}%")
-    print(f"Defender wounds distribution: {np.bincount(d_wounds)}")
+    print(f"Defender wounds taken distribution: {np.bincount(d_wounds)}")
     print(f"Defender avg. wounds taken: {d_wounds.mean()}")
     print(f"Defender killed: {d_killed/samples * 100}%")
     print()
@@ -169,6 +227,7 @@ fighters = [
     Fighter("Trooper Veteran (Bayonet)", 3, 4, 6, 2, 3, 0, None, 7),
 ]
 
-for attacker, defender, strategy in product(fighters, fighters, [StrategyBerzerker, StrategyDefenderParry, StrategyMaxParry]):
+strategies = [StrategyBerzerker, StrategyAttackerParry, StrategyDefenderParry, StrategyMaxParry]
+for attacker, defender, strategy in product(fighters, fighters, strategies):
     s = strategy(attacker, defender)
     simulate_melee(attacker, defender, s)
