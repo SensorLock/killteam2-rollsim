@@ -44,21 +44,21 @@ def simulate_ranged(attacker: Attacker, defender: Defender, samples=100000):
     hits -= saves
     hits[hits < 0] = 0
 
-    wounds = (mws + crits * attacker.dmg_crit + hits * attacker.dmg)
+    damage = (mws + crits * attacker.dmg_crit + hits * attacker.dmg)
     
     if defender.fnp is not None:
         # Get rolls for feel-no-pains equal up max possible wounds, will take prefix of this based on actual wounds
-        fnp_rolls = np.random.choice(6, (samples, wounds.max())) + 1
+        fnp_rolls = np.random.choice(6, (samples, damage.max())) + 1
         fnp_rolls = fnp_rolls >= defender.fnp
 
         for i in range(samples):
             # Set rolls that were on wounds beyond what should be checked to False
-            fnp_rolls[i][wounds[i]:] = False
+            fnp_rolls[i][damage[i]:] = False
         
         fnp = fnp_rolls.sum(axis=1)
-        wounds -= fnp
+        damage -= fnp
 
-    return wounds
+    return damage
 
 
 weapons = [
@@ -75,18 +75,18 @@ targets = [
 if __name__ == "__main__":
     all_dfs = []
     for weapon, target in product(weapons, targets):
-        wounds = simulate_ranged(weapon, target)
-        kills = (wounds >= target.wounds).sum()
+        damage = simulate_ranged(weapon, target)
+        kills = (damage >= target.wounds).sum()
         
-        df = pd.DataFrame(wounds, columns=["Wounds"])
-        df["Killed"] = df["Wounds"] >= target.wounds
-        df["Probability"] = 1 / wounds.shape[0]
+        df = pd.DataFrame(damage, columns=["Damage"])
+        df["Killed"] = df["Damage"] >= target.wounds
+        df["Probability"] = 1 / damage.shape[0]
         df["Weapon"] = weapon.name
         df["Target"] = target.name
         
         all_dfs.append(df)
 
     df = pd.concat(all_dfs)
-    fig = px.histogram(df, x="Wounds", y="Probability", color="Killed", facet_row="Weapon", facet_col="Target")
+    fig = px.histogram(df, x="Damage", y="Probability", color="Killed", facet_row="Weapon", facet_col="Target")
     fig.show()
     
