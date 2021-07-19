@@ -1,6 +1,8 @@
 from collections import namedtuple
 from itertools import product
 import numpy as np
+import pandas as pd
+import plotly.express as px
 
 Attacker = namedtuple("Attacker", "name num to_hit to_crit dmg dmg_crit mws")
 Defender = namedtuple("Defender", "name num to_save to_critsave fnp wounds")
@@ -56,13 +58,7 @@ def simulate_ranged(attacker: Attacker, defender: Defender, samples=100000):
         fnp = fnp_rolls.sum(axis=1)
         wounds -= fnp
 
-    kills = (wounds >= defender.wounds).sum()
-
-    print(f"{attacker.name} shooting at {defender.name}")
-    print(f"Wounds distribution: {np.bincount(wounds)}")
-    print(f"Avg. wounds taken: {wounds.mean()}")
-    print(f"Kill: {kills/samples * 100}%")
-    print()
+    return wounds
 
 
 weapons = [
@@ -76,5 +72,21 @@ targets = [
     Defender("Trooper Veteran (Hardened by War)", 3, 5, 6, 5, 7),
 ]
 
-for weapon, target in product(weapons, targets):
-    simulate_ranged(weapon, target)
+if __name__ == "__main__":
+    all_dfs = []
+    for weapon, target in product(weapons, targets):
+        wounds = simulate_ranged(weapon, target)
+        kills = (wounds >= target.wounds).sum()
+        
+        df = pd.DataFrame(wounds, columns=["Wounds"])
+        df["Killed"] = df["Wounds"] >= target.wounds
+        df["Probability"] = 1 / wounds.shape[0]
+        df["Weapon"] = weapon.name
+        df["Target"] = target.name
+        
+        all_dfs.append(df)
+
+    df = pd.concat(all_dfs)
+    fig = px.histogram(df, x="Wounds", y="Probability", color="Killed", facet_row="Weapon", facet_col="Target")
+    fig.show()
+    
