@@ -74,19 +74,23 @@ targets = [
 
 if __name__ == "__main__":
     all_dfs = []
+    kill_probs = []
     for weapon, target in product(weapons, targets):
         damage = simulate_ranged(weapon, target)
-        kills = (damage >= target.wounds).sum()
         
         df = pd.DataFrame(damage, columns=["Damage"])
-        df["Killed"] = df["Damage"] >= target.wounds
-        df["Probability"] = 1 / damage.shape[0]
         df["Weapon"] = weapon.name
         df["Target"] = target.name
-        
         all_dfs.append(df)
+        
+        kill_probs.append((len(weapons) - weapons.index(weapon),
+                           targets.index(target)+1,
+                           (damage >= target.wounds).sum() / damage.shape[0]))
+
 
     df = pd.concat(all_dfs)
-    fig = px.histogram(df, x="Damage", y="Probability", color="Killed", facet_row="Weapon", facet_col="Target")
+    fig = px.histogram(df, x="Damage", histnorm="probability", facet_row="Weapon", facet_col="Target")
+    for row, col, y in kill_probs:
+        fig.add_hrect(y0=0, y1=y, row=row, col=col, fillcolor="red", opacity=0.2, layer="below")
     fig.show()
     
