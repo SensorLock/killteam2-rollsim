@@ -2,39 +2,82 @@ from ast import Str
 from collections import namedtuple
 from itertools import product
 import numpy as np
+import pandas as pd
+import plotly.express as px
 
-Fighter = namedtuple("Fighter", "name num to_hit to_crit dmg dmg_crit mws fnp wounds")
 
+Fighter = namedtuple("Fighter", "name a ws dmg dmg_crit wounds keyword")
 
-class Strategy:
+fighters = [
+    Fighter("T Power", 4, 3, 4, 6, 7, {"lethal": 5}),
+    Fighter("T Bayonet", 3, 4, 2, 3, 7, {}),
+    Fighter("H Blade", 5, 3, 4, 5, 8, {"balanced": None}),
+    Fighter("H Caress", 5, 4, 5, 6, 8, {}),
+    Fighter("H Embrace", 5, 3, 4, 5, 8, {"brutal": None}),
+    Fighter("H Kiss", 5, 3, 3, 7, 8, {}),
+]
+
+class Melee:
     def __init__(self, attacker, defender, strategy_attacker, strategy_defender):
         self.attacker = attacker
         self.defender = defender
         self.strategy_attacker = strategy_attacker
         self.strategy_defender = strategy_defender
 
-    def __str__(self):
-        return f"[Strategy: {self.strategy_attacker.__name__} into {self.strategy_defender.__name__}]"
+    @staticmethod
+    def do_rerolls(datacard, rolls):
+        rerolls = 0
+        if "relentless" in datacard.keyword:
+            rerolls = (rolls < datacard.ws).sum()
+        elif "balanced" in datacard.keyword:
+            if any(rolls < datacard.ws):
+                rerolls = 1
+        elif "ceaseless" in datacard.keyword:
+            if any(rolls == 1):
+                rerolls = 1
 
-    def __call__(self, params):
-        a_crits, a_hits, a_wounds_taken, d_crits, d_hits, d_wounds_taken = params
+        if rerolls:
+            rolls = np.concatenate((rolls, np.random.choice(6, (rerolls,)) + 1))
+        
+        return rolls
 
-        # TODO OPEN Q: are all hits resolved? or just until one model dies?
-        # TODO OPEN Q: how are opposing crits parried? can you use 2 hits to parry a crit?
+    def simulate(self):
+        # TODO assists from nearby allies
+        a_rolls = np.random.choice(6, (self.attacker.a,)) + 1
+        a_rolls = self.do_rerolls(self.attacker, a_rolls)
+        a_to_crit = self.attacker.keyword.get("lethal", 6)
+        a_crits = (a_rolls >= a_to_crit).sum()
+        a_hits = (a_rolls >= self.attacker.ws).sum() - a_crits
+
+        d_rolls = np.random.choice(6, (self.defender.a,)) + 1
+        d_rolls = self.do_rerolls(self.defender, d_rolls)
+        d_to_crit = self.defender.keyword.get("lethal", 6)
+        d_crits = (d_rolls >= d_to_crit).sum()
+        d_hits = (d_rolls >= self.defender.ws).sum() - d_crits
+        
+        if "rending" in self.attacker.keyword and a_crits > 0 and a_hits > 0:
+            a_hits -= 1
+            a_crits += 1
+
+        if "rending" in self.defender.keyword and d_crits > 0 and d_hits > 0:
+            d_hits -= 1
+            d_crits += 1
+
+        a_wounds_taken = 0
+        d_wounds_taken = 0
+
         while (a_crits + a_hits + d_crits + d_hits) > 0:
-            if a_wounds_taken >= self.attacker.wounds:
-                break
-            
-            a_crits, a_hits, d_crits, d_hits, d_wounds_taken = self.strategy_attacker(attacker, defender,
+            a_crits, a_hits, d_crits, d_hits, d_wounds_taken = self.strategy_attacker(self.attacker, self.defender,
                                                                                       a_crits, a_hits, d_crits, d_hits, d_wounds_taken)
-            
             if d_wounds_taken >= self.defender.wounds:
                 break
 
-            d_crits, d_hits, a_crits, a_hits, a_wounds_taken = self.strategy_defender(defender, attacker,
+            d_crits, d_hits, a_crits, a_hits, a_wounds_taken = self.strategy_defender(self.defender, self.attacker,
                                                                                       d_crits, d_hits, a_crits, a_hits, a_wounds_taken)
-        
-        return a_wounds_taken, d_wounds_taken
+            if a_wounds_taken >= self.attacker.wounds:
+                break
+
+        return (a_wounds_taken, d_wounds_taken)
 
 
     @staticmethod
@@ -60,14 +103,17 @@ class Strategy:
             elif opp_crits > 0:
                 opp_crits -= 1
             elif opp_hits > 0:
-                # TODO OPEN Q: crit conversion for melee
                 opp_hits -= 1
             else:
                 opp_wounds_taken += me.dmg_crit
         elif my_hits > 0:
             my_hits -= 1
-            if opp_wounds_taken + me.dmg >= opp.wounds:
+            if ("brutal" in opp.keyword) or (opp_wounds_taken + me.dmg >= opp.wounds):
                 opp_wounds_taken += me.dmg
+            elif opp_crits > 0 and my_hits > 0:
+                # Subtract 1 more of my hits to block a crit (may be better approaches based on dmg_crit vs dmg)
+                opp_crits -= 1
+                my_hits -= 1
             elif opp_hits > 0:
                 opp_hits -= 1
             else:
@@ -81,9 +127,9 @@ class Strategy:
         # Go for the kill, but fall back to parrying if you don't have enough damage left to kill
         # This doesn't consider ahead of time the number of available parries the opponent may take
         if my_crits * me.dmg_crit + my_hits * me.dmg + opp_wounds_taken > opp.wounds:
-            return Strategy.berzerker(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken)
+            return Melee.berzerker(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken)
         else:
-            return Strategy.parry_riposte(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken)
+            return Melee.parry_riposte(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken)
 
     @staticmethod
     def overpower(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken):
@@ -94,48 +140,30 @@ class Strategy:
         usable_hits = max(my_hits - opp_hits - carryover, 0)
         
         if usable_crits * me.dmg_crit + usable_hits * me.dmg + opp_wounds_taken > opp.wounds:
-            return Strategy.berzerker(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken)
+            return Melee.berzerker(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken)
         else:
-            return Strategy.parry_riposte(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken)
+            return Melee.parry_riposte(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken)
 
+    # TODO another strategy consideration: if I know opp will kill me and have no way to stop it, then go max dmg
+    #   also, examining if opponent has enough dmg to kill me in overpower scenario
 
-def simulate_melee(attacker: Fighter, defender: Fighter, strategy, samples=100000):
-    # Roll a bunch of dice in atk and def groups
-    a_rolls = np.random.choice(6, (samples, attacker.num)) + 1
-    d_rolls = np.random.choice(6, (samples, defender.num)) + 1
-    
-    a_crits = (a_rolls >= attacker.to_crit).sum(axis=1)
-    a_hits = (a_rolls >= attacker.to_hit).sum(axis=1) - a_crits
+if __name__ == "__main__":
+    strategies = [Melee.parry_riposte]
+    #strategies = [Melee.berzerker, Melee.aggressive, Melee.parry_riposte, Melee.overpower]
 
-    d_crits = (d_rolls >= defender.to_crit).sum(axis=1)
-    d_hits = (d_rolls >= defender.to_hit).sum(axis=1) - d_crits
+    max_wounds = max(f.wounds for f in fighters)
 
-    results = np.stack((a_crits, a_hits, d_crits * defender.mws,
-                        d_crits, d_hits, a_crits * attacker.mws))
-    wounds_taken = np.apply_along_axis(strategy, 0, results)
+    all_dfs = []
+    kill_probs = []
+    for attacker, defender, a_strategy, d_strategy in product(fighters[0:2], fighters[2:], strategies, strategies):
+        melee = Melee(attacker, defender, a_strategy, d_strategy)
+        damage = np.array([melee.simulate() for _ in range(1000)])
+        data = pd.DataFrame(damage, columns=["A dmg", "D dmg"])
+        data = data.groupby(["A dmg", "D dmg"]).size().reset_index(name="count")
+        data["A"] = f"{attacker.name}:{a_strategy.__name__}"
+        data["D"] = f"{defender.name}:{d_strategy.__name__}"
+        all_dfs.append(data)
 
-    a_wounds = wounds_taken[0]
-    a_killed = (a_wounds >= attacker.wounds).sum()
-
-    d_wounds = wounds_taken[1]
-    d_killed = (d_wounds >= defender.wounds).sum()
-
-    print(f"{attacker.name} fighting {defender.name} using {str(strategy)}")
-    print(f"Attacker wounds taken distribution: {np.bincount(a_wounds)}")
-    print(f"Attacker avg. wounds taken: {a_wounds.mean()}")
-    print(f"Attacker killed: {a_killed/samples * 100}%")
-    print(f"Defender wounds taken distribution: {np.bincount(d_wounds)}")
-    print(f"Defender avg. wounds taken: {d_wounds.mean()}")
-    print(f"Defender killed: {d_killed/samples * 100}%")
-    print()
-
-
-fighters = [
-    Fighter("Trooper Veteran (Power Weapon)", 4, 3, 5, 4, 6, 0, None, 7),
-    # Fighter("Trooper Veteran (Bayonet)", 3, 4, 6, 2, 3, 0, None, 7),
-]
-
-strategies = [Strategy.berzerker, Strategy.aggressive, Strategy.parry_riposte, Strategy.overpower]
-for attacker, defender, a_strategy, d_strategy in product(fighters, fighters, strategies, strategies):
-    s = Strategy(attacker, defender, a_strategy, d_strategy)
-    simulate_melee(attacker, defender, s)
+    df = pd.concat(all_dfs)
+    fig = px.scatter(df, x="D dmg", y="A dmg", facet_row="A", facet_col="D", size="count")
+    fig.show()
