@@ -52,7 +52,7 @@ targets = [
 def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.int:
     a_rolls = np.random.choice(6, (attacker.a,)) + 1
 
-    rerolls = 0    
+    rerolls = 0
     if "relentless" in attacker.keyword:
         rerolls = (a_rolls < attacker.bs).sum()
     elif "balanced" in attacker.keyword:
@@ -63,7 +63,7 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
             rerolls = 1
 
     if rerolls:
-        a_rolls = np.concatenate((a_rolls, np.random.choice(6, (1,)) + 1))
+        a_rolls = np.concatenate((a_rolls, np.random.choice(6, (rerolls,)) + 1))
     
     to_crit = attacker.keyword.get("lethal", 6)
     
