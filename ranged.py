@@ -29,6 +29,8 @@ weapons = [
     Attacker("Shuriken Catapult", 4, 3, 3, 4, {"balanced": None, "rending": None}),
     Attacker("Guardian Spear", 4, 2, 3, 5, {"p": 1}),
     #Attacker("Sentinel Blade", 4, 2, 3, 4, {"p": 1}),
+    Attacker("Burst Cannon", 6, 4, 3, 4, {"ceaseless": None}),
+    Attacker("Fusion Blaster", 4, 4, 6, 3, {"ap": 2, "mw": 4}),
 ]
 
 Defender = namedtuple("Defender", "name df save wounds keyword")
@@ -41,6 +43,7 @@ targets = [
     Defender("Poxwalker", 3, 6, 7, {"fnp": 5}),
     Defender("Player", 3, 6, 8, {"invuln": 4}),
     Defender("Dire Avenger", 3, 4, 8, {}),
+    Defender("Ranger", 3, 5, 8, {"camo_cloak": None}),
     Defender("Chaos Space Marine", 3, 3, 12, {}),
     Defender("Rubric Marine", 3, 3, 12, {"invuln": 5, "all_is_dust": None}),
     Defender("Plague Marine", 3, 3, 12, {"fnp": 5}),
@@ -94,16 +97,37 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
     else:
         df -= ap
 
-    cover_saved = 0
+    cover_retained = 0
     if cover and "no_cover" not in attacker.keyword:
-        # TODO camo gives second retained die, and there are edge cases where you roll anyways
-        # TODO camo can't take 2 dice in case of AP2
-        cover_saved = 1
-        df -= 1
+        cover_retained = 2 if "camo_cloak" in defender.keyword else 1
+    
+    # Cover is limited by df, since AP & P is applied first
+    # No point in retaining more dice than there were hits, fish for crit saves with the rest
+    # TODO This could do more to factor in relative dmg of crits vs hits
+    cover_retained = min(df, cover_retained, hits)
+    df -= cover_retained
 
     d_rolls = np.random.choice(6, (df,)) + 1
     crits_saved = (d_rolls >= 6).sum()
-    hits_saved = cover_saved + (d_rolls >= save).sum() - crits_saved
+    hits_saved = cover_retained + (d_rolls >= save).sum() - crits_saved
+
+    saves_to_upgrade = 0
+    saves_to_downgrade = 0
+    if attacker.dmg_crit > attacker.dmg * 2:
+        # prioritize saving crits over hits
+        saves_to_upgrade = hits_saved
+    elif attacker.dmg < attacker.dmg_crit <= attacker.dmg * 2:
+        # prioritize saving hits, then use spare saves to save crits, allowing up to 1 regular hit to go through to save another crit
+        saves_to_upgrade = min(hits_saved - hits + 1, max(0, hits - hits_saved))
+    elif attacker.dmg_crit >= attacker.dmg:
+        # use leftovers to save crits
+        saves_to_upgrade = max(hits_saved - hits, 0)
+    elif attacker.dmg_crit < attacker.dmg:
+        # melta-like weapons where regular hits are more damage than crits apart from the MW
+        saves_to_downgrade = min(crits_saved, max(0, hits - hits_saved))
+
+    crits_saved -= saves_to_downgrade
+    hits_saved += saves_to_downgrade
 
     crits -= crits_saved
 
@@ -112,17 +136,7 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
         hits += crits
         crits = 0
 
-    saves_to_consume = 0
-    # TODO handle melta-like cases - regular hits are more damage than crits!
-    if attacker.dmg_crit < attacker.dmg * 2:
-        # prioritize saving hits, then use spare saves to save crits, allowing up to 1 regular hit to go through to save another crit
-        if hits_saved >= 2 and hits_saved > hits and crits > 0:
-            saves_to_consume = min(hits_saved - hits + 1, hits_saved)
-    else:
-        # prioritize saving crits over hits
-        if hits_saved >= 2 and crits > 0:
-            saves_to_consume = hits_saved
-    converted_critsaves = min(saves_to_consume // 2, crits)
+    converted_critsaves = min(saves_to_upgrade // 2, crits)
     crits -= converted_critsaves
     hits_saved -= converted_critsaves * 2
 
@@ -145,7 +159,7 @@ if __name__ == "__main__":
     kill_probs = []
     for weapon, target in product(weapons, targets):
         print(f"{weapon.name} -> {target.name}")
-        damage = np.array([simulate_ranged(weapon, target, False) for _ in range(10000)])
+        damage = np.array([simulate_ranged(weapon, target, cover=False) for _ in range(10000)])
         data = pd.DataFrame(damage, columns=["Damage"])
         data["W"] = weapon.name
         data["T"] = target.name
