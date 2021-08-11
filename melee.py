@@ -15,6 +15,10 @@ fighters = [
     Fighter("H Caress", 5, 4, 5, 6, 8, {}),
     Fighter("H Embrace", 5, 3, 4, 5, 8, {"brutal": None}),
     Fighter("H Kiss", 5, 3, 3, 7, 8, {}),
+    Fighter("KN Big Choppa", 4, 2, 5, 6, 13, {}),
+    Fighter("KN Power Klaw", 4, 3, 5, 7, 13, {"brutal": None}),
+    Fighter("C Guardian Spear", 5, 2, 5, 7, 18, {"lethal": 5}),
+    Fighter("C Sentinel Blade", 5, 2, 4, 6, 18, {"lethal": 5, "storm_shield": None}),
 ]
 
 class Melee:
@@ -70,11 +74,13 @@ class Melee:
             a_crits, a_hits, d_crits, d_hits, d_wounds_taken = self.strategy_attacker(self.attacker, self.defender,
                                                                                       a_crits, a_hits, d_crits, d_hits, d_wounds_taken)
             if d_wounds_taken >= self.defender.wounds:
+                d_wounds_taken = self.defender.wounds
                 break
 
             d_crits, d_hits, a_crits, a_hits, a_wounds_taken = self.strategy_defender(self.defender, self.attacker,
                                                                                       d_crits, d_hits, a_crits, a_hits, a_wounds_taken)
             if a_wounds_taken >= self.attacker.wounds:
+                a_wounds_taken = self.attacker.wounds
                 break
 
         return (a_wounds_taken, d_wounds_taken)
@@ -96,14 +102,16 @@ class Melee:
     @staticmethod
     def parry_riposte(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken):
         # PARRY EVERYTHING! (unless there is a lethal riposte)!
+        # TODO does the storm shield actually work like this for crits and converted crits?
+        shield_mult = 2 if "storm_shield" in me.keyword else 1
         if my_crits > 0:
             my_crits -= 1
             if opp_wounds_taken + me.dmg_crit >= opp.wounds:
                 opp_wounds_taken += me.dmg_crit
             elif opp_crits > 0:
-                opp_crits -= 1
+                opp_crits -= min(1 * shield_mult, opp_crits)
             elif opp_hits > 0:
-                opp_hits -= 1
+                opp_hits -= min(1 * shield_mult, opp_hits)
             else:
                 opp_wounds_taken += me.dmg_crit
         elif my_hits > 0:
@@ -112,10 +120,10 @@ class Melee:
                 opp_wounds_taken += me.dmg
             elif opp_crits > 0 and my_hits > 0:
                 # Subtract 1 more of my hits to block a crit (may be better approaches based on dmg_crit vs dmg)
-                opp_crits -= 1
+                opp_crits -= min(1 * shield_mult, opp_crits)
                 my_hits -= 1
             elif opp_hits > 0:
-                opp_hits -= 1
+                opp_hits -= min(1 * shield_mult, opp_hits)
             else:
                 opp_wounds_taken += me.dmg
 
@@ -148,14 +156,11 @@ class Melee:
     #   also, examining if opponent has enough dmg to kill me in overpower scenario
 
 if __name__ == "__main__":
-    strategies = [Melee.parry_riposte]
-    #strategies = [Melee.berzerker, Melee.aggressive, Melee.parry_riposte, Melee.overpower]
-
-    max_wounds = max(f.wounds for f in fighters)
+    strategies = [Melee.berzerker, Melee.parry_riposte]
 
     all_dfs = []
     kill_probs = []
-    for attacker, defender, a_strategy, d_strategy in product(fighters[0:2], fighters[2:], strategies, strategies):
+    for attacker, defender, a_strategy, d_strategy in product(fighters[6:8], fighters[8:], strategies, strategies):
         melee = Melee(attacker, defender, a_strategy, d_strategy)
         damage = np.array([melee.simulate() for _ in range(1000)])
         data = pd.DataFrame(damage, columns=["A dmg", "D dmg"])

@@ -96,6 +96,8 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
 
     cover_saved = 0
     if cover and "no_cover" not in attacker.keyword:
+        # TODO camo gives second retained die, and there are edge cases where you roll anyways
+        # TODO camo can't take 2 dice in case of AP2
         cover_saved = 1
         df -= 1
 
@@ -111,6 +113,7 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
         crits = 0
 
     saves_to_consume = 0
+    # TODO handle melta-like cases - regular hits are more damage than crits!
     if attacker.dmg_crit < attacker.dmg * 2:
         # prioritize saving hits, then use spare saves to save crits, allowing up to 1 regular hit to go through to save another crit
         if hits_saved >= 2 and hits_saved > hits and crits > 0:
