@@ -102,14 +102,13 @@ class Melee:
     @staticmethod
     def parry_riposte(me, opp, my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken):
         # PARRY EVERYTHING! (unless there is a lethal riposte)!
-        # TODO does the storm shield actually work like this for crits and converted crits?
         shield_mult = 2 if "storm_shield" in me.keyword else 1
         if my_crits > 0:
             my_crits -= 1
             if opp_wounds_taken + me.dmg_crit >= opp.wounds:
                 opp_wounds_taken += me.dmg_crit
             elif opp_crits > 0:
-                opp_crits -= min(1 * shield_mult, opp_crits)
+                opp_crits -= 1
             elif opp_hits > 0:
                 opp_hits -= min(1 * shield_mult, opp_hits)
             else:
@@ -120,7 +119,7 @@ class Melee:
                 opp_wounds_taken += me.dmg
             elif opp_crits > 0 and my_hits > 0:
                 # Subtract 1 more of my hits to block a crit (may be better approaches based on dmg_crit vs dmg)
-                opp_crits -= min(1 * shield_mult, opp_crits)
+                opp_crits -= 1
                 my_hits -= 1
             elif opp_hits > 0:
                 opp_hits -= min(1 * shield_mult, opp_hits)
