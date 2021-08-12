@@ -91,10 +91,10 @@ class Melee:
         # BLOCK NOTHING!
         if my_crits > 0:
             my_crits -= 1
-            opp_wounds_taken += me.dmg
+            opp_wounds_taken += me.dmg_crit
         elif my_hits > 0:
             my_hits -= 1
-            opp_wounds_taken += me.dmg_crit
+            opp_wounds_taken += me.dmg
             
         return my_crits, my_hits, opp_crits, opp_hits, opp_wounds_taken
 
