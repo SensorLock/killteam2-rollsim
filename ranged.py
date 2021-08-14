@@ -168,13 +168,15 @@ if __name__ == "__main__":
         kill_probs.append((len(weapons) - weapons.index(weapon),
                            targets.index(target)+1,
                            target.wounds,
+                           (damage >= (target.wounds // 2)).sum() / damage.shape[0],
                            (damage >= target.wounds).sum() / damage.shape[0]))
 
 
     df = pd.concat(all_dfs)
     fig = px.histogram(df, x="Damage", histnorm="probability", facet_row="W", facet_col="T")
-    for row, col, x, y in kill_probs:
+    for row, col, x, y_i, y_k in kill_probs:
         fig.add_vline(x=x-0.5, row=row, col=col, line_color="red", line_dash="dash")
-        fig.add_hrect(y0=0, y1=y, row=row, col=col, fillcolor="red", opacity=0.2, layer="below")
+        fig.add_hrect(y0=0, y1=y_i, row=row, col=col, fillcolor="yellow", opacity=0.2, layer="below")
+        fig.add_hrect(y0=0, y1=y_k, row=row, col=col, fillcolor="red", opacity=0.2, layer="below")
     fig.show()
     
