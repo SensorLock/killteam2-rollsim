@@ -68,11 +68,19 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
     if rerolls:
         a_rolls = np.concatenate((a_rolls, np.random.choice(6, (rerolls,)) + 1))
     
-    to_crit = attacker.keyword.get("lethal", 6)
+    
+    if "grav" in attacker.keyword and defender.save <= 3:
+        to_crit = 4
+    else:
+        to_crit = attacker.keyword.get("lethal", 6)
     
     crits = (a_rolls >= to_crit).sum()
     mws = crits * attacker.keyword.get("mw", 0) + crits * attacker.keyword.get("splash", 0)
     hits = (a_rolls >= attacker.bs).sum() - crits
+
+    if "ltgb" in attacker.keyword and any(a_rolls == (to_crit - 1)):
+        hits -= 1
+        crits += 1
     
     if "rending" in attacker.keyword and crits > 0 and hits > 0:
         hits -= 1
@@ -159,7 +167,10 @@ if __name__ == "__main__":
     kill_probs = []
     for weapon, target in product(weapons, targets):
         print(f"{weapon.name} -> {target.name}")
-        damage = np.array([simulate_ranged(weapon, target, cover=False) for _ in range(10000)])
+        shoot = weapon.keyword.get("shoot", 1)
+        runs = 10000
+        damage = np.array([simulate_ranged(weapon, target, cover=False) for _ in range(runs * shoot)])
+        damage = damage.reshape((shoot, runs)).sum(axis=0)
         data = pd.DataFrame(damage, columns=["Damage"])
         data["W"] = weapon.name
         data["T"] = target.name
@@ -175,7 +186,7 @@ if __name__ == "__main__":
     df = pd.concat(all_dfs)
     fig = px.histogram(df, x="Damage", histnorm="probability", facet_row="W", facet_col="T")
     for row, col, x, y_i, y_k in kill_probs:
-        fig.add_vline(x=x-0.5, row=row, col=col, line_color="red", line_dash="dash")
+        fig.add_vline(x=x, row=row, col=col, line_color="red", line_dash="dash")
         fig.add_hrect(y0=0, y1=y_i, row=row, col=col, fillcolor="yellow", opacity=0.2, layer="below")
         fig.add_hrect(y0=0, y1=y_k, row=row, col=col, fillcolor="red", opacity=0.2, layer="below")
     fig.show()
