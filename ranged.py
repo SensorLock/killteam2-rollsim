@@ -86,6 +86,9 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
         hits -= 1
         crits += 1
 
+    if "dakka" in attacker.keyword and crits > 0 and attacker.a - crits - hits > 0:
+        crits += 1
+
     df = defender.df
     save = defender.save
 
@@ -166,7 +169,6 @@ if __name__ == "__main__":
     all_dfs = []
     kill_probs = []
     for weapon, target in product(weapons, targets):
-        print(f"{weapon.name} -> {target.name}")
         shoot = weapon.keyword.get("shoot", 1)
         runs = 10000
         damage = np.array([simulate_ranged(weapon, target, cover=False) for _ in range(runs * shoot)])
@@ -181,7 +183,7 @@ if __name__ == "__main__":
                            target.wounds,
                            (damage >= (target.wounds // 2)).sum() / damage.shape[0],
                            (damage >= target.wounds).sum() / damage.shape[0]))
-
+        print(f"{weapon.name} -> {target.name}: {kill_probs[-1][-2:]}")
 
     df = pd.concat(all_dfs)
     fig = px.histogram(df, x="Damage", histnorm="probability", facet_row="W", facet_col="T")
