@@ -75,7 +75,6 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
         to_crit = attacker.keyword.get("lethal", 6)
     
     crits = (a_rolls >= to_crit).sum()
-    mws = crits * attacker.keyword.get("mw", 0) + crits * attacker.keyword.get("splash", 0)
     hits = (a_rolls >= attacker.bs).sum() - crits
 
     if "ltgb" in attacker.keyword and any(a_rolls == (to_crit - 1)):
@@ -88,6 +87,8 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
 
     if "dakka" in attacker.keyword and crits > 0 and attacker.a - crits - hits > 0:
         crits += 1
+
+    mws = crits * attacker.keyword.get("mw", 0) + crits * attacker.keyword.get("splash", 0)
 
     df = defender.df
     save = defender.save
