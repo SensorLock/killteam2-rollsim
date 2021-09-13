@@ -195,6 +195,9 @@ if __name__ == "__main__":
         data["D"] = f"{defender.name}"
         all_dfs.append(data)
 
+    nbinsx = int(data["D WR"].max() - data["D WR"].min() + 1)
+    nbinsy = int(data["A WR"].max() - data["A WR"].min() + 1)
     df = pd.concat(all_dfs)
-    fig = px.density_heatmap(df, x="D WR", y="A WR", z="count", facet_row="A", facet_col="D")
+    fig = px.density_heatmap(df, x="D WR", y="A WR", z="count", facet_row="A", facet_col="D",
+                             nbinsx=nbinsx, nbinsy=nbinsy, histnorm="probability")
     fig.show()
