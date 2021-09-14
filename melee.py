@@ -17,7 +17,7 @@ fighters = [
 ]
 
 
-MeleeState = namedtuple("MeleeState", "atk_crits atk_hits atk_wounds_taken def_crits def_hits def_wounds_taken")
+MeleeState = namedtuple("MeleeState", "crits hits wounds_remaining dmg dmg_crit brutal storm_shield")
 
 
 class Melee:
@@ -72,117 +72,77 @@ class Melee:
             d_hits -= 1
             d_crits += 1
 
-        state = MeleeState(a_crits, a_hits, 0, d_crits, d_hits, 0)
-        wounds_remaining = self.minimax(state, True)
+        a_state = MeleeState(a_crits, a_hits,
+                             self.attacker.wounds, self.attacker.dmg, self.attacker.dmg_crit,
+                             "brutal" in self.attacker.keyword, "storm_shield" in self.attacker.keyword)
+        d_state = MeleeState(d_crits, d_hits,
+                             self.defender.wounds, self.defender.dmg, self.defender.dmg_crit,
+                             "brutal" in self.defender.keyword, "storm_shield" in self.defender.keyword)
+        
+        wounds_remaining = self.minimax(a_state, d_state, True)
         return wounds_remaining
 
+    @staticmethod
+    def minimax(a_state: MeleeState, d_state: MeleeState, attacker_turn: bool):
+        if a_state.wounds_remaining <= 0 or d_state.wounds_remaining <= 0 or \
+            (a_state.crits == 0 and a_state.hits == 0 and d_state.crits == 0 and d_state.hits == 0):
+            return (a_state.wounds_remaining, d_state.wounds_remaining)
 
-    def minimax(self, state: MeleeState, attacker_turn: bool):
-        if state.atk_wounds_taken >= self.attacker.wounds or state.def_wounds_taken >= self.defender.wounds or \
-            (state.atk_crits == 0 and state.atk_hits == 0 and state.def_crits == 0 and state.def_hits == 0):
-            return (max(self.attacker.wounds - state.atk_wounds_taken, 0),
-                    max(self.defender.wounds - state.def_wounds_taken, 0))
+        # Striker and target state tuples based on attacker_turn
+        s_state = a_state if attacker_turn else d_state
+        t_state = d_state if attacker_turn else a_state
+
+        children = []
+        
+        # Let opponent finish assigning dice
+        if s_state.crits == 0 and s_state.hits == 0:
+            children.append((s_state, t_state))
+        
+        # Strike hit
+        if s_state.hits > 0:
+            s_child = s_state._replace(hits=s_state.hits-1)
+            t_child = t_state._replace(wounds_remaining=max(t_state.wounds_remaining - s_state.dmg, 0))
+            children.append((s_child, t_child))
+            
+        # Strike crit
+        if s_state.crits > 0:
+            s_child = s_state._replace(crits=s_state.crits-1)
+            t_child = t_state._replace(wounds_remaining=max(t_state.wounds_remaining - s_state.dmg_crit, 0))
+            children.append((s_child, t_child))
+
+        # Parry hit
+        if s_state.hits > 0 and t_state.hits > 0 and not t_state.brutal:
+            s_child = s_state._replace(hits=s_state.hits-1)
+            t_child = t_state._replace(hits=t_state.hits-1)
+            children.append((s_child, t_child))
+
+        # Parry crit
+        if s_state.crits > 0 and t_state.crits > 0:
+            s_child = s_state._replace(crits=s_state.crits-1)
+            if s_state.storm_shield and t_state.crits >= 2:
+                t_child = t_state._replace(crits=t_state.crits-2)
+            elif s_state.storm_shield and t_state.hits > 0:
+                t_child = t_state._replace(crits=t_state.crits-1, hits=t_state.hits-1)
+            else:
+                t_child = t_state._replace(crits=t_state.crits-1)
+            children.append((s_child, t_child))
+
+        # Parry hit with crit
+        if s_state.crits > 0 and t_state.hits > 0:
+            s_child = s_state._replace(crits=s_state.crits-1)
+            if s_state.storm_shield and t_state.hits >= 2:
+                t_child = t_state._replace(hits=t_state.hits-2)
+            else:
+                t_child = t_state._replace(hits=t_state.hits-1)
+            children.append((s_child, t_child))
 
         if attacker_turn:
-            value = []
-            
-            # Let opponent finish assigning dice
-            if state.atk_crits == 0 and state.atk_hits == 0:
-                value.append(self.minimax(state._replace(), not attacker_turn))
-            
-            # Strike hit
-            if state.atk_hits > 0:
-                child = state._replace(atk_hits=state.atk_hits-1,
-                                       def_wounds_taken=state.def_wounds_taken+self.attacker.dmg)
-                value.append(self.minimax(child, not attacker_turn))
-        
-            # Strike crit
-            if state.atk_crits > 0:
-                child = state._replace(atk_crits=state.atk_crits-1,
-                                       def_wounds_taken=state.def_wounds_taken+self.attacker.dmg_crit)
-                value.append(self.minimax(child, not attacker_turn))
-
-            # Parry hit
-            if state.atk_hits > 0 and state.def_hits > 0 and "brutal" not in self.defender.keyword:
-                child = state._replace(atk_hits=state.atk_hits-1,
-                                       def_hits=state.def_hits-1)
-                value.append(self.minimax(child, not attacker_turn))
-
-            # Parry crit
-            if state.atk_crits > 0 and state.def_crits > 0:
-                if "storm_shield" in self.attacker.keyword and state.def_crits >= 2:
-                    child = state._replace(atk_crits=state.atk_crits-1,
-                                           def_crits=state.def_crits-2)
-                elif "storm_shield" in self.attacker.keyword and state.def_hits > 0:
-                    child = state._replace(atk_crits=state.atk_crits-1,
-                                           def_crits=state.def_crits-1,
-                                           def_hits=state.def_hits-1)
-                else:
-                    child = state._replace(atk_crits=state.atk_crits-1,
-                                           def_crits=state.def_crits-1)
-                value.append(self.minimax(child, not attacker_turn))
-
-            # Parry hit with crit
-            if state.atk_crits > 0 and state.def_hits > 0:
-                if "storm_shield" in self.attacker.keyword and state.def_hits >= 2:
-                    child = state._replace(atk_crits=state.atk_crits-1,
-                                           def_hits=state.def_hits-2)
-                else:
-                    child = state._replace(atk_crits=state.atk_crits-1,
-                                           def_hits=state.def_hits-1)
-                value.append(self.minimax(child, not attacker_turn))
-        
-            return max(value, key=lambda x: x[0])
+            values = [Melee.minimax(a, d, not attacker_turn) for a, d in children]
+            return max(values, key=lambda x: x[0])
         else:
-            value = []
+            values = [Melee.minimax(a, d, not attacker_turn) for d, a in children]
+            return min(values, key=lambda x: x[0])
 
-            # Let opponent finish assigning dice
-            if state.def_crits == 0 and state.def_hits == 0:
-                value.append(self.minimax(state._replace(), not attacker_turn))
-
-            # Strike hit
-            if state.def_hits > 0:
-                child = state._replace(def_hits=state.def_hits-1,
-                                       atk_wounds_taken=state.atk_wounds_taken + self.defender.dmg)
-                value.append(self.minimax(child, not attacker_turn))
-        
-            # Strike crit
-            if state.def_crits > 0:
-                child = state._replace(def_crits=state.def_crits-1,
-                                       atk_wounds_taken=state.atk_wounds_taken + self.defender.dmg_crit)
-                value.append(self.minimax(child, not attacker_turn))
-
-            # Parry hit
-            if state.def_hits > 0 and state.atk_hits > 0 and "brutal" not in self.attacker.keyword:
-                child = state._replace(def_hits=state.def_hits-1,
-                                       atk_hits=state.atk_hits-1)
-                value.append(self.minimax(child, not attacker_turn))
-
-            # Parry crit
-            if state.def_crits > 0 and state.atk_crits > 0:
-                if "storm_shield" in self.defender.keyword and state.atk_crits >= 2:
-                    child = state._replace(def_crits=state.def_crits-1,
-                                           atk_crits=state.atk_crits-2)
-                elif "storm_shield" in self.defender.keyword and state.atk_hits > 0:
-                    child = state._replace(def_crits=state.def_crits-1,
-                                           atk_crits=state.atk_crits-1,
-                                           atk_hits=state.atk_hits-1)
-                else:
-                    child = state._replace(def_crits=state.def_crits-1,
-                                           atk_crits=state.atk_crits-1)
-                value.append(self.minimax(child, not attacker_turn))
-
-            # Parry hit with crit
-            if state.def_crits > 0 and state.atk_hits > 0:
-                if "storm_shield" in self.defender.keyword and state.atk_hits >= 2:
-                    child = state._replace(def_crits=state.def_crits-1,
-                                           atk_hits=state.atk_hits-2)
-                else:
-                    child = state._replace(def_crits=state.def_crits-1,
-                                           atk_hits=state.atk_hits-1)
-                value.append(self.minimax(child, not attacker_turn))
-
-            return min(value, key=lambda x: x[0])
 
 if __name__ == "__main__":
     all_dfs = []
