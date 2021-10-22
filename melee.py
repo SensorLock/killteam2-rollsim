@@ -72,6 +72,14 @@ class Melee:
             d_hits -= 1
             d_crits += 1
 
+        if "ltgb" in self.attacker.keyword and any(a_rolls == (a_to_crit - 1)):
+            a_hits -= 1
+            a_crits += 1
+
+        if "ltgb" in self.defender.keyword and any(d_rolls == (d_to_crit - 1)):
+            d_hits -= 1
+            d_crits += 1
+
         a_state = MeleeState(a_crits, a_hits,
                              self.attacker.wounds, self.attacker.dmg, self.attacker.dmg_crit,
                              "brutal" in self.attacker.keyword, "storm_shield" in self.attacker.keyword)
@@ -79,14 +87,15 @@ class Melee:
                              self.defender.wounds, self.defender.dmg, self.defender.dmg_crit,
                              "brutal" in self.defender.keyword, "storm_shield" in self.defender.keyword)
         
-        wounds_remaining = self.minimax(a_state, d_state, True)
-        return wounds_remaining
+        a_wr, d_wr, trace = self.minimax(a_state, d_state, True)
+        # print(trace)
+        return (a_wr, d_wr)
 
     @staticmethod
-    def minimax(a_state: MeleeState, d_state: MeleeState, attacker_turn: bool):
+    def minimax(a_state: MeleeState, d_state: MeleeState, attacker_turn: bool, trace=""):
         if a_state.wounds_remaining <= 0 or d_state.wounds_remaining <= 0 or \
             (a_state.crits == 0 and a_state.hits == 0 and d_state.crits == 0 and d_state.hits == 0):
-            return (a_state.wounds_remaining, d_state.wounds_remaining)
+            return (a_state.wounds_remaining, d_state.wounds_remaining, trace)
 
         # Striker and target state tuples based on attacker_turn
         s_state = a_state if attacker_turn else d_state
@@ -96,25 +105,25 @@ class Melee:
         
         # Let opponent finish assigning dice
         if s_state.crits == 0 and s_state.hits == 0:
-            children.append((s_state, t_state))
+            children.append((s_state, t_state, trace+" "))
         
         # Strike hit
         if s_state.hits > 0:
             s_child = s_state._replace(hits=s_state.hits-1)
             t_child = t_state._replace(wounds_remaining=max(t_state.wounds_remaining - s_state.dmg, 0))
-            children.append((s_child, t_child))
+            children.append((s_child, t_child, trace+"s"))
             
         # Strike crit
         if s_state.crits > 0:
             s_child = s_state._replace(crits=s_state.crits-1)
             t_child = t_state._replace(wounds_remaining=max(t_state.wounds_remaining - s_state.dmg_crit, 0))
-            children.append((s_child, t_child))
+            children.append((s_child, t_child, trace+"S"))
 
         # Parry hit
         if s_state.hits > 0 and t_state.hits > 0 and not t_state.brutal:
             s_child = s_state._replace(hits=s_state.hits-1)
             t_child = t_state._replace(hits=t_state.hits-1)
-            children.append((s_child, t_child))
+            children.append((s_child, t_child, trace+"p"))
 
         # Parry crit
         if s_state.crits > 0 and t_state.crits > 0:
@@ -125,7 +134,7 @@ class Melee:
                 t_child = t_state._replace(crits=t_state.crits-1, hits=t_state.hits-1)
             else:
                 t_child = t_state._replace(crits=t_state.crits-1)
-            children.append((s_child, t_child))
+            children.append((s_child, t_child, trace+"P"))
 
         # Parry hit with crit
         if s_state.crits > 0 and t_state.hits > 0:
@@ -134,13 +143,13 @@ class Melee:
                 t_child = t_state._replace(hits=t_state.hits-2)
             else:
                 t_child = t_state._replace(hits=t_state.hits-1)
-            children.append((s_child, t_child))
+            children.append((s_child, t_child, trace+"R"))
 
         if attacker_turn:
-            values = [Melee.minimax(a, d, not attacker_turn) for a, d in children]
+            values = [Melee.minimax(a, d, not attacker_turn, t) for a, d, t in children]
             return max(values, key=lambda x: x[0])
         else:
-            values = [Melee.minimax(a, d, not attacker_turn) for d, a in children]
+            values = [Melee.minimax(a, d, not attacker_turn, t) for d, a, t in children]
             return min(values, key=lambda x: x[0])
 
 
@@ -151,13 +160,12 @@ if __name__ == "__main__":
         damage = np.array([melee.simulate() for _ in range(1000)])
         data = pd.DataFrame(damage, columns=["A WR", "D WR"])
         data = data.groupby(["A WR", "D WR"]).size().reset_index(name="count")
-        data["A"] = f"{attacker.name}"
-        data["D"] = f"{defender.name}"
-        all_dfs.append(data)
 
-    nbinsx = int(data["D WR"].max() - data["D WR"].min() + 1)
-    nbinsy = int(data["A WR"].max() - data["A WR"].min() + 1)
-    df = pd.concat(all_dfs)
-    fig = px.density_heatmap(df, x="D WR", y="A WR", z="count", facet_row="A", facet_col="D",
-                             nbinsx=nbinsx, nbinsy=nbinsy, histnorm="probability")
-    fig.show()
+        nbinsx = int(data["D WR"].max() - data["D WR"].min() + 1)
+        nbinsy = int(data["A WR"].max() - data["A WR"].min() + 1)
+        # TODO lock z scale to have consistent colors
+        fig = px.density_heatmap(data, x="D WR", y="A WR", z="count",
+                                 marginal_x="box", marginal_y="box",
+                                 title=f"{attacker.name} attacking {defender.name}",
+                                 nbinsx=nbinsx, nbinsy=nbinsy, histnorm="probability")
+        fig.show()
