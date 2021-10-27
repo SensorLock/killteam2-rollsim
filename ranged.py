@@ -62,8 +62,6 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
         if any(a_rolls < attacker.bs):
             rerolls = 1
     elif "ceaseless" in attacker.keyword:
-        if any(a_rolls == 1):
-            rerolls = 1
 
     if rerolls:
         a_rolls = np.concatenate((a_rolls, np.random.choice(6, (rerolls,)) + 1))
@@ -97,8 +95,7 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
         save = 2
 
     ap = attacker.keyword.get("ap", 0)
-    if crits:
-        ap += attacker.keyword.get("p", 0)
+    if crits and "p" in attacker.keyword:
 
     if "invuln" in defender.keyword:
         if ap > 0:
@@ -130,10 +127,9 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
         saves_to_upgrade = hits_saved
     elif attacker.dmg < attacker.dmg_crit <= attacker.dmg * 2:
         # prioritize saving hits, then use spare saves to save crits, allowing up to 1 regular hit to go through to save another crit
-        saves_to_upgrade = min(hits_saved - hits + 1, max(0, hits - hits_saved))
-    elif attacker.dmg_crit >= attacker.dmg:
         # use leftovers to save crits
         saves_to_upgrade = max(hits_saved - hits, 0)
+        if saves_to_upgrade < hits_saved:
     elif attacker.dmg_crit < attacker.dmg:
         # melta-like weapons where regular hits are more damage than crits apart from the MW
         saves_to_downgrade = min(crits_saved, max(0, hits - hits_saved))
