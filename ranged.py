@@ -66,20 +66,20 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
 
     if rerolls:
         a_rolls = np.concatenate((a_rolls, np.random.choice(6, (rerolls,)) + 1))
-    
-    
+
+
     if "grav" in attacker.keyword and defender.save <= 3:
         to_crit = 4
     else:
         to_crit = attacker.keyword.get("lethal", 6)
-    
+
     crits = (a_rolls >= to_crit).sum()
     hits = (a_rolls >= attacker.bs).sum() - crits
 
     if "ltgb" in attacker.keyword and any(a_rolls == (to_crit - 1)):
         hits -= 1
         crits += 1
-    
+
     if "rending" in attacker.keyword and crits > 0 and hits > 0:
         hits -= 1
         crits += 1
@@ -111,7 +111,7 @@ def simulate_ranged(attacker: Attacker, defender: Defender, cover: bool) -> np.i
     cover_retained = 0
     if cover and "no_cover" not in attacker.keyword:
         cover_retained = 2 if "camo_cloak" in defender.keyword else 1
-    
+
     # Cover is limited by df, since AP & P is applied first
     # No point in retaining more dice than there were hits, fish for crit saves with the rest
     # TODO This could do more to factor in relative dmg of crits vs hits
@@ -176,13 +176,18 @@ if __name__ == "__main__":
         data["W"] = weapon.name
         data["T"] = target.name
         all_dfs.append(data)
-        
+
+        expected_dmg = 0
+        # Maximum dmg is when all attacks crit
+        for i in range((weapon.dmg_crit + weapon.keyword.get("mw", 0) )* weapon.a + 1):
+            expected_dmg += (damage == i).sum() / damage.shape[0] * i
+
         kill_probs.append((len(weapons) - weapons.index(weapon),
                            targets.index(target)+1,
                            target.wounds,
                            (damage >= (target.wounds // 2)).sum() / damage.shape[0],
                            (damage >= target.wounds).sum() / damage.shape[0]))
-        print(f"{weapon.name} -> {target.name}: {kill_probs[-1][-2:]}")
+        print(f"{weapon.name} -> {target.name}: {kill_probs[-1][-2:]} Expected Damage: {expected_dmg}")
 
     df = pd.concat(all_dfs)
     fig = px.histogram(df, x="Damage", histnorm="probability", facet_row="W", facet_col="T")
@@ -191,4 +196,4 @@ if __name__ == "__main__":
         fig.add_hrect(y0=0, y1=y_i, row=row, col=col, fillcolor="yellow", opacity=0.2, layer="below")
         fig.add_hrect(y0=0, y1=y_k, row=row, col=col, fillcolor="red", opacity=0.2, layer="below")
     fig.show()
-    
+
