@@ -72,13 +72,10 @@ class Melee:
             d_hits -= 1
             d_crits += 1
 
+        # Let The Galaxy Burn only works on your activation, so can't be used by defender
         if "ltgb" in self.attacker.keyword and any(a_rolls == (a_to_crit - 1)):
             a_hits -= 1
             a_crits += 1
-
-        if "ltgb" in self.defender.keyword and any(d_rolls == (d_to_crit - 1)):
-            d_hits -= 1
-            d_crits += 1
 
         a_state = MeleeState(a_crits, a_hits,
                              self.attacker.wounds, self.attacker.dmg, self.attacker.dmg_crit,
