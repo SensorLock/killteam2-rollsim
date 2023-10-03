@@ -35,7 +35,7 @@ class Melee:
                 rerolls = 1
         elif "ceaseless" in datacard.keyword:
             if any(rolls == 1):
-                rerolls = 1
+                rerolls = (rolls == 1).sum()
 
         if rerolls:
             rolls = np.concatenate((rolls, np.random.choice(6, (rerolls,)) + 1))
